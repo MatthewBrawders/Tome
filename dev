@@ -35,7 +35,7 @@ open_browser() {
     if command -v powershell.exe >/dev/null 2>&1; then (powershell.exe -NoLogo -NoProfile -Command "Start-Process '$FRONTEND_URL'" >/dev/null 2>&1 &) && return 0; fi
     if command -v cmd.exe       >/dev/null 2>&1; then (cmd.exe /C start "" "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
     if [ -x "/c/Windows/explorer.exe" ]; then (/c/Windows/explorer.exe "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
-    if command -v rundll32.exe  >/dev/null 2>&1; then (rundll32.exe url.dll,FileProtocolHandler "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
+    if command -v rundll32.exe  >/dev/null 2>&1; then (rundll32.exe url.dll,FileProtocolHandler "$FRONTEND_URL" >/devnull 2>&1 &) && return 0; fi
   fi
   if is_wsl; then
     if command -v wslview       >/dev/null 2>&1; then (wslview "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
@@ -93,38 +93,53 @@ case "$CMD" in
 
   create)
     # Usage:
-    #   ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]
-    #   or env vars: TITLE, AUTHOR, YEAR, GENRE, IMAGE, REVIEW
+    #   ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"] [Username]
+    #   or env vars: TITLE, AUTHOR, YEAR, GENRE, IMAGE, REVIEW, BOOK_USERNAME/BOOK_USER/USERNAME/USER
 
     PY="$(command -v python3 || command -v python || true)"
     if [[ -z "$PY" ]]; then echo "[ERROR] Python is required for 'dev create'." >&2; exit 1; fi
 
     TITLE_ARG="${2-}"; AUTHOR_ARG="${3-}"; YEAR_ARG="${4-}"
     GENRE_ARG="${5-}"; IMAGE_ARG="${6-}"; REVIEW_ARG="${7-}"
+    USERNAME_ARG="${8-}"
+
+    DEFAULT_USERNAME="${BOOK_USERNAME:-${BOOK_USER:-${USERNAME:-${USER:-}}}}"
 
     JSON="$("$PY" - <<'PY' \
-      "${TITLE:-}" "${AUTHOR:-}" "${YEAR:-}" "${GENRE:-}" "${IMAGE:-}" "${REVIEW:-}" \
-      "${TITLE_ARG:-}" "${AUTHOR_ARG:-}" "${YEAR_ARG:-}" "${GENRE_ARG:-}" "${IMAGE_ARG:-}" "${REVIEW_ARG:-}"
+      "${TITLE:-}" "${AUTHOR:-}" "${YEAR:-}" "${GENRE:-}" "${IMAGE:-}" "${REVIEW:-}" "${BOOK_USERNAME:-}" "${BOOK_USER:-}" \
+      "${TITLE_ARG:-}" "${AUTHOR_ARG:-}" "${YEAR_ARG:-}" "${GENRE_ARG:-}" "${IMAGE_ARG:-}" "${REVIEW_ARG:-}" "${USERNAME_ARG:-}" "${DEFAULT_USERNAME:-}"
 import json, sys
 
-Tenv,Aenv,Yenv,Genv,Ienv,Renv,Targ,Aarg,Yarg,Garg,Iarg,Rarg = sys.argv[1:13]
-def pick(env, arg): return env if env else (arg if arg else None)
+(Tenv, Aenv, Yenv, Genv, Ienv, Renv, Uenv1, Uenv2,
+ Targ, Aarg, Yarg, Garg, Iarg, Rarg, Uarg, Udef) = sys.argv[1:17]
 
-title  = pick(Tenv, Targ)
-author = pick(Aenv, Aarg)
-year   = pick(Yenv, Yarg)
-genre  = pick(Genv, Garg)
-image  = pick(Ienv, Iarg)
-review = pick(Renv, Rarg)
+def pick(*vals):
+    for v in vals:
+        if v is not None and v != "":
+            return v
+    return None
+
+title    = pick(Tenv, Targ)
+author   = pick(Aenv, Aarg)
+year     = pick(Yenv, Yarg)
+genre    = pick(Genv, Garg)
+image    = pick(Ienv, Iarg)
+review   = pick(Renv, Rarg)
+username = pick(Uenv1, Uenv2, Uarg, Udef)
 
 if not title or not author:
-    sys.stderr.write('Usage: ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]\n')
+    sys.stderr.write('Usage: ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"] [Username]\n')
+    sys.exit(2)
+if not username:
+    sys.stderr.write('ERROR: username is required. Set BOOK_USERNAME/BOOK_USER (or USERNAME/USER) env or pass as 8th arg.\n')
     sys.exit(2)
 
-out = {"title": title, "author": author}
+out = {"title": title, "author": author, "username": username}
 if year is not None:
-    try: out["year"] = int(year)
-    except Exception: out["year"] = year
+    try:
+        out["year"] = int(year)
+    except Exception:
+        out["year"] = year
 if genre  not in (None, ""): out["genre"]  = genre
 if image  not in (None, ""): out["image"]  = image
 if review not in (None, ""): out["review"] = review
@@ -181,8 +196,9 @@ Commands:
   ping      GET /ping from backend
   books     GET /books
   create    POST /books
-            ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]
-            (or via env vars: TITLE AUTHOR YEAR GENRE IMAGE REVIEW)
+            ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"] [Username]
+            (or via env vars: TITLE AUTHOR YEAR GENRE IMAGE REVIEW BOOK_USERNAME/BOOK_USER/USERNAME/USER)
+            If [Username] not supplied, defaults to BOOK_USERNAME/BOOK_USER or $USERNAME/$USER.
   get       GET /books/<id>
   delete    DELETE /books/<id>
   open      Try to open the frontend URL in your browser
@@ -191,8 +207,9 @@ Examples:
   ./dev up
   ./dev restart
   ./dev books
-  ./dev create "Help Me" "Matthew Brawders" 2025 "Fantasy" "https://www.shutterstock.com/shutterstock/photos/608978792/display_1500/stock-vector-help-me-vector-banner-on-white-background-608978792.jpg" "Loved it"
-  TITLE="PLEASE PLEASE PLEASE" AUTHOR="Matthew Brawders" YEAR=9999 ./dev create
+  BOOK_USERNAME="matt" ./dev create "Help Me" "Matthew Brawders" 2025 "Fantasy" "https://www.shutterstock.com/shutterstock/photos/608978792/display_1500/stock-vector-help-me-vector-banner-on-white-background-608978792.jpg" "Loved it"
+  TITLE="PLEASE PLEASE PLEASE" AUTHOR="Matthew Brawders" YEAR=9999 BOOK_USERNAME="matt" ./dev create
+  ./dev create "Another" "Author" 1999 "" "" "" matt
   ./dev get 68a3fb47a4139dede9c2478b
   ./dev delete 68a3fb47a4139dede9c2478b
 USAGE

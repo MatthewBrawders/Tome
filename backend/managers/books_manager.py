@@ -1,9 +1,10 @@
-# ===== books_manager.py =====
-from typing import List, Optional
+# ===== managers/books_manager.py =====
+from typing import List, Optional, Dict, Any
 from models.books_model import BookCreate, BookUpdate, BookOut
 from databases.books_repository import BooksRepository
 
-def _normalize_id(doc: dict) -> dict:
+
+def _normalize_id(doc: Dict[str, Any]) -> Dict[str, Any]:
     if not doc:
         raise ValueError("Empty document")
     d = dict(doc)
@@ -20,17 +21,20 @@ def _normalize_id(doc: dict) -> dict:
         return d
     raise KeyError("Document missing identifier ('_id'/'id'/'inserted_id').")
 
-def _coerce_types(d: dict) -> dict:
-    # Make sure "year" is int if it was stored as a string
+
+def _coerce_types(d: Dict[str, Any]) -> Dict[str, Any]:
     if "year" in d and isinstance(d["year"], str) and d["year"].isdigit():
         d["year"] = int(d["year"])
+    if "username" in d and d["username"] is not None and not isinstance(d["username"], str):
+        d["username"] = str(d["username"])
     return d
 
-def _to_out(doc: dict) -> BookOut:
+
+def _to_out(doc: Dict[str, Any]) -> BookOut:
     d = _normalize_id(doc)
     d = _coerce_types(d)
-    # BookOut has optional fields; missing keys become None automatically
     return BookOut.model_validate(d)
+
 
 class BooksManager:
     def __init__(self, uri: str, db_name: str, collection: str):
@@ -49,6 +53,7 @@ class BooksManager:
             try:
                 out.append(_to_out(d))
             except KeyError:
+                # Skip malformed docs rather than crashing the endpoint
                 continue
         return out
 
@@ -57,8 +62,8 @@ class BooksManager:
         return _to_out(doc) if doc else None
 
     async def create_book(self, data: BookCreate) -> BookOut:
-        # Include all fields, even None values
         payload = data.model_dump()
+
         inserted = await self._repo.insert_one(payload)
         if "inserted_id" in inserted and "_id" not in inserted and "id" not in inserted:
             created_id = str(inserted["inserted_id"])
@@ -68,11 +73,11 @@ class BooksManager:
         return _to_out(doc)
 
     async def update_book(self, book_id: str, data: BookUpdate) -> Optional[BookOut]:
-        payload = data.model_dump(exclude_unset=True)
+        payload = data.model_dump(exclude_unset=True, exclude_none=True)
         if not payload:
-            # nothing to update; return current doc
             doc = await self._repo.find_one(book_id)
             return _to_out(doc) if doc else None
+
         doc = await self._repo.update_one(book_id, payload)
         return _to_out(doc) if doc else None
 

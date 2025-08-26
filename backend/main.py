@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import os
+from typing import Optional
 
 from managers.books_manager import BooksManager
 from models.books_model import BookCreate, BookUpdate, BookOut
@@ -73,3 +74,8 @@ async def delete_book(book_id: str):
     ok = await books.delete_book(book_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Book not found")
+    
+@app.get("/books", response_model=List[BookOut])
+async def list_books(username: Optional[str] = None):
+    assert books is not None
+    return await books.list_books(username=username)

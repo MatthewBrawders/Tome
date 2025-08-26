@@ -7,6 +7,17 @@ const API_BASE = (
   "/api"
 ).replace(/\/+$/, "");
 
+const DEFAULT_FILTERS = {
+  q: "",
+  author: "",
+  genre: "",
+  username: "",
+  yearMin: "",
+  yearMax: "",
+  hasImage: "any",
+  sort: "",
+};
+
 export default function App() {
   const [books, setBooks] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -27,11 +38,11 @@ export default function App() {
     year: "",
     image: "",
     review: "",
+    username: "",
   });
 
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Profile dropdown (click-to-toggle)
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
   useEffect(() => {
@@ -50,7 +61,6 @@ export default function App() {
     };
   }, []);
 
-  // Add-book modal state
   const [addOpen, setAddOpen] = useState(false);
   const [addSaving, setAddSaving] = useState(false);
   const [addError, setAddError] = useState("");
@@ -61,7 +71,12 @@ export default function App() {
     year: "",
     image: "",
     review: "",
+    username: "",
   });
+
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [filterDraft, setFilterDraft] = useState(DEFAULT_FILTERS);
 
   const show = (v) => (v === 0 || v ? String(v) : "—");
 
@@ -117,7 +132,65 @@ export default function App() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
-  const hasBooks = useMemo(() => Array.isArray(books) && books.length > 0, [books]);
+  const filteredBooks = useMemo(() => {
+    let list = Array.isArray(books) ? [...books] : [];
+
+    const txt = (s) => (s ?? "").toString().toLowerCase();
+    const inRange = (y) => {
+      if (!y && y !== 0) return true;
+      const num = Number(y);
+      const min = filterDraft.yearMin !== "" ? Number(filterDraft.yearMin) : null;
+      const max = filterDraft.yearMax !== "" ? Number(filterDraft.yearMax) : null;
+      if (min !== null && num < min) return false;
+      if (max !== null && num > max) return false;
+      return true;
+    };
+
+    const f = filters;
+    list = list.filter((b) => {
+      const username = txt(b.username);
+      const title = txt(b.title);
+      const author = txt(b.author);
+      const genre = txt(b.genre);
+      const review = txt(b.review);
+      const q = txt(f.q);
+
+      if (q && !(title.includes(q) || author.includes(q) || review.includes(q) || username.includes(q))) return false;
+      if (f.author && !author.includes(txt(f.author))) return false;
+      if (f.genre && !genre.includes(txt(f.genre))) return false;
+      if (f.username && !username.includes(txt(f.username))) return false;
+      if (!inRange(b.year)) return false;
+
+      if (f.hasImage === "yes" && !b.image) return false;
+      if (f.hasImage === "no" && !!b.image) return false;
+
+      return true;
+    });
+
+    switch (f.sort) {
+      case "title-asc":
+        list.sort((a, b) => txt(a.title).localeCompare(txt(b.title)));
+        break;
+      case "title-desc":
+        list.sort((a, b) => txt(b.title).localeCompare(txt(a.title)));
+        break;
+      case "year-asc":
+        list.sort((a, b) => (a.year ?? 0) - (b.year ?? 0));
+        break;
+      case "year-desc":
+        list.sort((a, b) => (b.year ?? 0) - (a.year ?? 0));
+        break;
+      default:
+        break;
+    }
+
+    return list;
+  }, [books, filters, filterDraft.yearMin, filterDraft.yearMax]);
+
+  const hasBooks = useMemo(
+    () => Array.isArray(filteredBooks) && filteredBooks.length > 0,
+    [filteredBooks]
+  );
 
   const handleBookClick = (id) => {
     setSelectedId((cur) => (cur === id ? null : id));
@@ -132,6 +205,7 @@ export default function App() {
       year: book.year ?? "",
       image: book.image ?? "",
       review: book.review ?? "",
+      username: book.username ?? "",
     });
     setEditError("");
     setEditMode(true);
@@ -141,11 +215,16 @@ export default function App() {
   const closeConfirm = () => setConfirmOpen(false);
 
   const openAdd = () => {
-    setNewForm({ title: "", author: "", genre: "", year: "", image: "", review: "" });
+    setNewForm({ title: "", author: "", genre: "", year: "", image: "", review: "", username: "" });
     setAddError("");
     setAddOpen(true);
   };
   const closeAdd = () => setAddOpen(false);
+
+  const toggleFilter = () => {
+    setFilterDraft(filters);
+    setFilterOpen((v) => !v);
+  };
 
   const submitEdit = async (e) => {
     e.preventDefault();
@@ -159,6 +238,7 @@ export default function App() {
       year: form.year ? Number(form.year) : null,
       image: form.image || null,
       review: form.review || null,
+      username: form.username || null,
     };
     try {
       let res = await fetch(`${API_BASE}/books/${encodeURIComponent(selectedId)}`, {
@@ -223,6 +303,7 @@ export default function App() {
         year: newForm.year ? Number(newForm.year) : null,
         image: newForm.image || null,
         review: newForm.review || null,
+        username: newForm.username || null,
       };
       const res = await fetch(`${API_BASE}/books`, {
         method: "POST",
@@ -233,14 +314,21 @@ export default function App() {
       const created = await res.json();
       setBooks((list) => [...list, created]);
       setAddOpen(false);
-      // Optionally auto-select:
-      // const newId = created.id || created._id || created.book_id;
-      // if (newId) setSelectedId(newId);
     } catch (err) {
       setAddError(err?.message || "Failed to create book.");
     } finally {
       setAddSaving(false);
     }
+  };
+
+  const cancelFilters = () => {
+    setFilterDraft(filters);
+    setFilterOpen(false);
+  };
+  const resetFilters = () => setFilterDraft(DEFAULT_FILTERS);
+  const confirmFilters = () => {
+    setFilters(filterDraft);
+    setFilterOpen(false);
   };
 
   return (
@@ -264,14 +352,12 @@ export default function App() {
           </button>
         </div>
 
-        {/* Centered Add button */}
         <div className="nav-center">
           <button className="btn btn-add" onClick={openAdd} title="Add Book" aria-label="Add Book">
             +
           </button>
         </div>
 
-        {/* Profile: click-to-toggle dropdown */}
         <div className="nav-right">
           <div
             className={"profile" + (profileOpen ? " open" : "")}
@@ -304,12 +390,117 @@ export default function App() {
 
       <main className="grid">
         <section className="panel">
-          <h2 className="panel-title">All Books</h2>
+          <div className="panel-title-row">
+            <h2 className="panel-title">All Books</h2>
+            <button
+              className={"btn btn-circle" + (filterOpen ? " active" : "")}
+              onClick={toggleFilter}
+              aria-expanded={filterOpen}
+              aria-controls="filters"
+              title="Filter books"
+            >
+              <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+              </svg>
+            </button>
+          </div>
+
+          {filterOpen && (
+            <div id="filters" className="filter-panel" role="region" aria-label="Filters">
+              <div className="filter-list">
+                <div className="filter-row">
+                  <label>Search</label>
+                  <input
+                    placeholder="Title, author, review, or user…"
+                    value={filterDraft.q}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, q: e.target.value })}
+                  />
+                </div>
+
+                <div className="filter-row">
+                  <label>Author</label>
+                  <input
+                    value={filterDraft.author}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, author: e.target.value })}
+                  />
+                </div>
+
+                <div className="filter-row">
+                  <label>Genre</label>
+                  <input
+                    value={filterDraft.genre}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, genre: e.target.value })}
+                  />
+                </div>
+
+                <div className="filter-row">
+                  <label>User</label>
+                  <input
+                    value={filterDraft.username}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, username: e.target.value })}
+                  />
+                </div>
+
+                <div className="filter-row">
+                  <label>Year</label>
+                  <div className="two">
+                    <input
+                      type="number"
+                      placeholder="Min"
+                      value={filterDraft.yearMin}
+                      onChange={(e) => setFilterDraft({ ...filterDraft, yearMin: e.target.value })}
+                    />
+                    <input
+                      type="number"
+                      placeholder="Max"
+                      value={filterDraft.yearMax}
+                      onChange={(e) => setFilterDraft({ ...filterDraft, yearMax: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="filter-row">
+                  <label>Has cover</label>
+                  <select
+                    value={filterDraft.hasImage}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, hasImage: e.target.value })}
+                  >
+                    <option value="any">Any</option>
+                    <option value="yes">With cover</option>
+                    <option value="no">No cover</option>
+                  </select>
+                </div>
+
+                <div className="filter-row">
+                  <label>Sort by</label>
+                  <select
+                    value={filterDraft.sort}
+                    onChange={(e) => setFilterDraft({ ...filterDraft, sort: e.target.value })}
+                  >
+                    <option value="">—</option>
+                    <option value="title-asc">Title (A→Z)</option>
+                    <option value="title-desc">Title (Z→A)</option>
+                    <option value="year-asc">Year (oldest)</option>
+                    <option value="year-desc">Year (newest)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="filter-actions">
+                <button type="button" className="btn btn-cancel" onClick={cancelFilters}>Cancel</button>
+                <button type="button" className="btn btn-reset" onClick={resetFilters}>Reset</button>
+                <button type="button" className="btn btn-confirm" onClick={confirmFilters}>Confirm</button>
+              </div>
+            </div>
+          )}
+
           {listLoading && <p className="muted">Loading…</p>}
           {listError && <p className="error">Error: {listError}</p>}
           {!listLoading && !hasBooks && !listError && <p className="muted">No books yet.</p>}
+
           <ul className="book-list">
-            {books.map((b) => {
+            {filteredBooks.map((b) => {
               const id = b.id || b._id || b.book_id;
               return (
                 <li key={id}>
@@ -319,7 +510,9 @@ export default function App() {
                     title="View details"
                   >
                     <span className="book-title">{b.title}</span>
-                    {b.author && <span className="book-author">by {b.author}</span>}
+                    <span className="book-meta">
+                      {b.username ? <span className="book-user">by {b.username}</span> : null}
+                    </span>
                   </button>
                 </li>
               );
@@ -337,7 +530,12 @@ export default function App() {
           {!!book && !bookLoading && !bookError && (
             <div className="details details-vertical">
               <div className="details-header">
-                <h3 className="details-title">{show(book.title)}</h3>
+                <div>
+                  <h3 className="details-title">{show(book.title)}</h3>
+                  {book.username ? (
+                    <div className="details-subtitle">by {show(book.username)}</div>
+                  ) : null}
+                </div>
                 {!editMode && (
                   <div className="details-actions">
                     <button className="btn btn-edit" onClick={beginEdit} title="Edit">
@@ -447,6 +645,14 @@ export default function App() {
                         placeholder="https://example.com/cover.jpg"
                       />
                     </div>
+                    <div className="edit-item">
+                      <label>User</label>
+                      <input
+                        value={form.username}
+                        onChange={(e) => setForm({ ...form, username: e.target.value })}
+                        placeholder="username"
+                      />
+                    </div>
                     <div className="edit-item" style={{ alignItems: "start" }}>
                       <label>Review</label>
                       <textarea
@@ -493,7 +699,6 @@ export default function App() {
         </section>
       </main>
 
-      {/* Add New Book modal */}
       {addOpen && (
         <div className="modal-backdrop" role="dialog" aria-modal="true">
           <div className="modal">
@@ -501,6 +706,8 @@ export default function App() {
             {addError && <p className="error">Error: {addError}</p>}
             <form className="edit-form" onSubmit={submitAdd}>
               <div className="edit-list">
+                <div className="edit-item">
+                </div>
                 <div className="edit-item">
                   <label>Title</label>
                   <input
