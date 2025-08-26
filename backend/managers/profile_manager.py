@@ -73,7 +73,3 @@ class ProfilesManager:
 
     async def delete_profile(self, profile_id: str) -> bool:
         return await self._repo.delete_one(profile_id)
-
-    async def list_books(self, username: Optional[str] = None) -> List[BookOut]:
-        docs = await (self._repo.find_by_username(username) if username else self._repo.find_all())
-        return [_to_out(d) for d in docs if d]

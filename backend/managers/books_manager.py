@@ -56,6 +56,17 @@ class BooksManager:
                 # Skip malformed docs rather than crashing the endpoint
                 continue
         return out
+    
+    async def list_books_by_user(self, username: str) -> List[BookOut]:
+        docs = await self._repo.find_by_user(username)
+        out: List[BookOut] = []
+        for d in docs:
+            try:
+                out.append(_to_out(d))
+            except KeyError:
+                continue
+        return out
+
 
     async def get_book(self, book_id: str) -> Optional[BookOut]:
         doc = await self._repo.find_one(book_id)

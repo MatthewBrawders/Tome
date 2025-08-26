@@ -32,5 +32,7 @@ class BooksRepository:
         oid: ObjectId = to_object_id(book_id)
         return await self._mongo.delete_one(oid)
     
-    async def find_by_username(self, username: str) -> List[Dict[str, Any]]:
-        return await self._mongo.find_many({"username": username})
+    async def find_by_user(self, username: str) -> List[dict]:
+        cursor = self._collection.find({"username": username})
+        return await cursor.to_list(length=None)
+

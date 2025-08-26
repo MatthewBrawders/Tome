@@ -32,6 +32,3 @@ class ProfilesRepository:
     async def delete_one(self, profile_id: str) -> bool:
         oid: ObjectId = to_object_id(profile_id)
         return await self._mongo.delete_one(oid)
-
-    async def find_by_user(self, username: str) -> List[Dict[str, Any]]:
-        return await self._mongo.find_many({"username": username})
