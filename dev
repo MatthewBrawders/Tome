@@ -31,47 +31,25 @@ wait_http() {
 
 open_browser() {
   echo "[INFO] Opening $FRONTEND_URL ..."
-
-  # --- Git Bash / MSYS on Windows ---
   if is_msys; then
-    if command -v powershell.exe >/dev/null 2>&1; then
-      (powershell.exe -NoLogo -NoProfile -Command "Start-Process '$FRONTEND_URL'" >/dev/null 2>&1 &) && return 0
-    fi
-    if command -v cmd.exe >/dev/null 2>&1; then
-      (cmd.exe /C start "" "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0
-    fi
-    if [ -x "/c/Windows/explorer.exe" ]; then
-      (/c/Windows/explorer.exe "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0
-    fi
-    if command -v rundll32.exe >/dev/null 2>&1; then
-      (rundll32.exe url.dll,FileProtocolHandler "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0
-    fi
+    if command -v powershell.exe >/dev/null 2>&1; then (powershell.exe -NoLogo -NoProfile -Command "Start-Process '$FRONTEND_URL'" >/dev/null 2>&1 &) && return 0; fi
+    if command -v cmd.exe       >/dev/null 2>&1; then (cmd.exe /C start "" "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
+    if [ -x "/c/Windows/explorer.exe" ]; then (/c/Windows/explorer.exe "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
+    if command -v rundll32.exe  >/dev/null 2>&1; then (rundll32.exe url.dll,FileProtocolHandler "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
   fi
-
-  # --- WSL ---
   if is_wsl; then
-    if command -v wslview >/dev/null 2>&1; then
-      (wslview "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0
-    fi
-    if command -v powershell.exe >/dev/null 2>&1; then
-      (powershell.exe -NoLogo -NoProfile -Command "Start-Process '$FRONTEND_URL'" >/dev/null 2>&1 &) && return 0
-    fi
-    if command -v cmd.exe >/dev/null 2>&1; then
-      (cmd.exe /C start "" "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0
-    fi
+    if command -v wslview       >/dev/null 2>&1; then (wslview "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
+    if command -v powershell.exe>/dev/null 2>&1; then (powershell.exe -NoLogo -NoProfile -Command "Start-Process '$FRONTEND_URL'" >/dev/null 2>&1 &) && return 0; fi
+    if command -v cmd.exe       >/dev/null 2>&1; then (cmd.exe /C start "" "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
   fi
-
-  # --- Linux / macOS ---
   if command -v xdg-open >/dev/null 2>&1; then (xdg-open "$FRONTEND_URL" >/dev/null 2>&1 &) && return 0; fi
   if command -v open     >/dev/null 2>&1; then (open "$FRONTEND_URL"      >/dev/null 2>&1 &) && return 0; fi
-
   echo "[WARN] Could not auto-open. Please open: $FRONTEND_URL"
 }
 
 case "$CMD" in
   up)
     docker compose up -d --build
-    # Wait for backend first (so frontend proxy/API calls won't race)
     wait_http "$BASE_URL/ping" 60  || echo "[WARN] Backend not reachable yet: $BASE_URL"
     wait_http "$FRONTEND_URL"  60  || echo "[WARN] Frontend not reachable yet: $FRONTEND_URL"
     open_browser
@@ -115,25 +93,54 @@ case "$CMD" in
 
   create)
     # Usage:
-    #   ./dev create "Title" "Author" 2008
-    #   or: TITLE="Title" AUTHOR="Author" YEAR=2008 ./dev create
+    #   ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]
+    #   or env vars: TITLE, AUTHOR, YEAR, GENRE, IMAGE, REVIEW
+
+    PY="$(command -v python3 || command -v python || true)"
+    if [[ -z "$PY" ]]; then echo "[ERROR] Python is required for 'dev create'." >&2; exit 1; fi
+
     TITLE_ARG="${2-}"; AUTHOR_ARG="${3-}"; YEAR_ARG="${4-}"
-    TITLE="${TITLE:-${TITLE_ARG:-}}"
-    AUTHOR="${AUTHOR:-${AUTHOR_ARG:-}}"
-    YEAR="${YEAR:-${YEAR_ARG:-}}"
-    if [[ -z "${TITLE}" || -z "${AUTHOR}" ]]; then
-      echo 'Usage: ./dev create "Title" "Author" [Year]'
-      echo '   or: TITLE="Title" AUTHOR="Author" [YEAR=2008] ./dev create'
-      exit 2
-    fi
-    JSON=$(printf '{"title":"%s","author":"%s"%s}' \
-      "$TITLE" "$AUTHOR" \
-      "$( [[ -n "${YEAR}" ]] && printf ',\"year\":%s' "$YEAR" || printf '' )")
-    curl -s -X POST "$BASE_URL/books" -H 'Content-Type: application/json' -d "$JSON" | pretty || true
+    GENRE_ARG="${5-}"; IMAGE_ARG="${6-}"; REVIEW_ARG="${7-}"
+
+    JSON="$("$PY" - <<'PY' \
+      "${TITLE:-}" "${AUTHOR:-}" "${YEAR:-}" "${GENRE:-}" "${IMAGE:-}" "${REVIEW:-}" \
+      "${TITLE_ARG:-}" "${AUTHOR_ARG:-}" "${YEAR_ARG:-}" "${GENRE_ARG:-}" "${IMAGE_ARG:-}" "${REVIEW_ARG:-}"
+import json, sys
+
+Tenv,Aenv,Yenv,Genv,Ienv,Renv,Targ,Aarg,Yarg,Garg,Iarg,Rarg = sys.argv[1:13]
+def pick(env, arg): return env if env else (arg if arg else None)
+
+title  = pick(Tenv, Targ)
+author = pick(Aenv, Aarg)
+year   = pick(Yenv, Yarg)
+genre  = pick(Genv, Garg)
+image  = pick(Ienv, Iarg)
+review = pick(Renv, Rarg)
+
+if not title or not author:
+    sys.stderr.write('Usage: ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]\n')
+    sys.exit(2)
+
+out = {"title": title, "author": author}
+if year is not None:
+    try: out["year"] = int(year)
+    except Exception: out["year"] = year
+if genre  not in (None, ""): out["genre"]  = genre
+if image  not in (None, ""): out["image"]  = image
+if review not in (None, ""): out["review"] = review
+
+sys.stdout.write(json.dumps(out, ensure_ascii=False))
+PY
+)"
+    echo "[DEBUG] POST /books with payload: $JSON" 1>&2
+    printf '%s' "$JSON" \
+    | curl -s -X POST "$BASE_URL/books" \
+        -H 'Content-Type: application/json' \
+        --data-binary @- \
+    | pretty || true
     ;;
 
   get)
-    # Usage: ./dev get <BOOK_ID>
     if [[ $# -lt 2 ]]; then
       echo "Usage: ./dev get <BOOK_ID>"
       exit 2
@@ -142,7 +149,6 @@ case "$CMD" in
     ;;
 
   delete)
-    # Usage: ./dev delete <BOOK_ID>
     if [[ $# -lt 2 ]]; then
       echo "Usage: ./dev delete <BOOK_ID>"
       exit 2
@@ -175,17 +181,17 @@ Commands:
   ping      GET /ping from backend
   books     GET /books
   create    POST /books
+            ./dev create "Title" "Author" [Year] [Genre] [ImageURL] ["Review"]
+            (or via env vars: TITLE AUTHOR YEAR GENRE IMAGE REVIEW)
   get       GET /books/<id>
   delete    DELETE /books/<id>
   open      Try to open the frontend URL in your browser
 
 Examples:
   ./dev up
-  ./dev down
   ./dev restart
-  ./dev ping
   ./dev books
-  ./dev create "Help Me" "Matthew Brawders" 2025
+  ./dev create "Help Me" "Matthew Brawders" 2025 "Fantasy" "https://www.shutterstock.com/shutterstock/photos/608978792/display_1500/stock-vector-help-me-vector-banner-on-white-background-608978792.jpg" "Loved it"
   TITLE="PLEASE PLEASE PLEASE" AUTHOR="Matthew Brawders" YEAR=9999 ./dev create
   ./dev get 68a3fb47a4139dede9c2478b
   ./dev delete 68a3fb47a4139dede9c2478b
