@@ -9,6 +9,9 @@ from models.books_model import BookCreate, BookUpdate, BookOut
 from managers.profile_manager import ProfilesManager
 from models.profile_model import ProfileCreate, ProfileUpdate, ProfileOut
 
+from managers.comment_manager import CommentsManager
+from models.comment_model import CommentCreate, CommentOut
+
 app = FastAPI(title="Books & Profiles API")
 
 app.add_middleware(
@@ -23,17 +26,21 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
 DB_NAME = os.environ.get("MONGO_DB_NAME", "booksdb")
 BOOKS_COLLECTION = os.environ.get("MONGO_COLLECTION", "books")
 PROFILES_COLLECTION = os.environ.get("MONGO_PROFILES", "profiles")
+COMMENTS_COLLECTION = os.environ.get("MONGO_COMMENTS", "comments")  # <-- added
 
 books: BooksManager | None = None
 profiles: ProfilesManager | None = None
+comments: CommentsManager | None = None  # <-- added
 
 @app.on_event("startup")
 async def _startup():
-    global books, profiles
+    global books, profiles, comments
     books = BooksManager(MONGO_URI, DB_NAME, BOOKS_COLLECTION)
     profiles = ProfilesManager(MONGO_URI, DB_NAME, PROFILES_COLLECTION)
+    comments = CommentsManager(MONGO_URI, DB_NAME, COMMENTS_COLLECTION)
     await books.connect()
     await profiles.connect()
+    await comments.connect()
 
 @app.on_event("shutdown")
 async def _shutdown():
@@ -41,6 +48,8 @@ async def _shutdown():
         await books.close()
     if profiles:
         await profiles.close()
+    if comments:
+        await comments.close()
 
 @app.get("/ping")
 async def ping():
@@ -139,3 +148,35 @@ async def delete_profile(username: str):
     ok = await profiles.delete_profile(username)
     if not ok:
         raise HTTPException(status_code=404, detail="Profile not found")
+
+# ----- Comments -----
+
+@app.post("/comments", response_model=CommentOut, status_code=201)
+async def create_comment(data: CommentCreate):
+    assert comments is not None
+    return await comments.create_comment(data)
+
+@app.get("/comments/{comment_id}", response_model=CommentOut)
+async def get_comment(comment_id: str):
+    assert comments is not None
+    found = await comments.get_comment(comment_id)
+    if not found:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    return found
+
+@app.delete("/comments/{comment_id}", status_code=204)
+async def delete_comment(comment_id: str):
+    assert comments is not None
+    ok = await comments.delete_comment(comment_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Comment not found")
+
+@app.get("/comments/by-book/{book_id}", response_model=List[CommentOut])
+async def list_comments_by_book(book_id: str, limit: int = 100, skip: int = 0):
+    assert comments is not None
+    return await comments.list_comments_by_book(book_id, limit=limit, skip=skip)
+
+@app.get("/comments/by-user/{username}", response_model=List[CommentOut])
+async def list_comments_by_user(username: str, limit: int = 100, skip: int = 0):
+    assert comments is not None
+    return await comments.list_comments_by_user(username, limit=limit, skip=skip)

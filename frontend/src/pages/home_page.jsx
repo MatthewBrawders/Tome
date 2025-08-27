@@ -1,3 +1,4 @@
+// src/pages/home_page.jsx (App)
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import tomeLogo from "../assets/tome_logo.png";
 
@@ -11,9 +12,18 @@ const getUserCookie = () => {
   const m = document.cookie.match(/(?:^|;\s*)tome_user=([^;]*)/);
   return m ? decodeURIComponent(m[1]) : "";
 };
-
 const clearUserCookie = () =>
   (document.cookie = "tome_user=; path=/; max-age=0; samesite=lax");
+
+// utils
+const formatDateTime = () => new Date().toLocaleString();
+const getBookId = (bk, fallbackId) => {
+  const candidates = [bk?.id, bk?._id, bk?.book_id, fallbackId];
+  for (const c of candidates) {
+    if (c !== undefined && c !== null && String(c).trim() !== "") return c;
+  }
+  return null;
+};
 
 const DEFAULT_FILTERS = {
   q: "",
@@ -60,9 +70,7 @@ export default function App() {
       if (!profileRef.current) return;
       if (!profileRef.current.contains(e.target)) setProfileOpen(false);
     };
-    const onKey = (e) => {
-      if (e.key === "Escape") setProfileOpen(false);
-    };
+    const onKey = (e) => { if (e.key === "Escape") setProfileOpen(false); };
     document.addEventListener("mousedown", onDocClick);
     document.addEventListener("keydown", onKey);
     return () => {
@@ -88,10 +96,18 @@ export default function App() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [filterDraft, setFilterDraft] = useState(DEFAULT_FILTERS);
 
-  // NEW: recommend toggle
+  // recommend toggle
   const [recommendOn, setRecommendOn] = useState(false);
 
+  // comments state
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
+  const [newComment, setNewComment] = useState("");
+  const [postingComment, setPostingComment] = useState(false);
+
   const show = (v) => (v === 0 || v ? String(v) : "—");
+  const initials = (currentUser || "MB").slice(0, 2).toUpperCase();
 
   // initial load
   useEffect(() => {
@@ -113,11 +129,16 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
+  // load details + comments on select
   useEffect(() => {
     if (!selectedId) {
       setBook(null);
       setBookError("");
       setEditMode(false);
+      // clear comments when nothing selected
+      setComments([]);
+      setCommentsError("");
+      setNewComment("");
       return;
     }
     let cancelled = false;
@@ -132,6 +153,8 @@ export default function App() {
           setBook(data);
           setEditMode(false);
           setEditError("");
+          // refresh comments for this book
+          refreshComments(data);
         }
       } catch (err) {
         if (!cancelled) {
@@ -146,9 +169,73 @@ export default function App() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
+  // comments helpers
+  async function refreshComments(bookLike) {
+    const bid = getBookId(bookLike || book, selectedId);
+    if (bid === null) {
+      setComments([]);
+      setCommentsError("Book ID missing.");
+      return;
+    }
+    try {
+      setCommentsLoading(true);
+      setCommentsError("");
+      const res = await fetch(`${API_BASE}/comments/by-book/${encodeURIComponent(bid)}`);
+      if (!res.ok) throw new Error(`Comments fetch failed: ${res.status}`);
+      const data = await res.json();
+      setComments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setCommentsError(err?.message || "Failed to load comments.");
+    } finally {
+      setCommentsLoading(false);
+    }
+  }
+
+  async function submitComment(e) {
+    e.preventDefault();
+    const username = getUserCookie();
+    const bid = getBookId(book, selectedId);
+
+    if (!username) {
+      setCommentsError("You must be logged in to comment.");
+      return;
+    }
+    if (bid === null) {
+      setCommentsError("Book ID missing.");
+      return;
+    }
+
+    const text = newComment.trim();
+    if (!text) return;
+
+    const payload = {
+      username,
+      book_id: String(bid),  // <-- always string
+      comment: text,
+      date_and_time: new Date().toLocaleString(),
+    };
+
+    try {
+      setPostingComment(true);
+      setCommentsError("");
+      const res = await fetch(`${API_BASE}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`Create comment failed: ${res.status}`);
+      const created = await res.json();
+      setNewComment("");
+      setComments((list) => [created, ...list]);
+    } catch (err) {
+      setCommentsError(err?.message || "Failed to post comment.");
+    } finally {
+      setPostingComment(false);
+    }
+  }
+
   const filteredBooks = useMemo(() => {
     let list = Array.isArray(books) ? [...books] : [];
-
     const txt = (s) => (s ?? "").toString().toLowerCase();
     const inRange = (y) => {
       if (!y && y !== 0) return true;
@@ -309,6 +396,9 @@ export default function App() {
       setSelectedId(null);
       setBook(null);
       setEditMode(false);
+      // also clear comments
+      setComments([]);
+      setCommentsError("");
     } catch (err) {
       alert(err?.message || "Failed to delete.");
     }
@@ -324,7 +414,7 @@ export default function App() {
     setAddSaving(true);
     setAddError("");
     try {
-      const username = getUserCookie(); // always prepend cookie username
+      const username = getUserCookie();
       const payload = {
         username: username || null,
         title: newForm.title || null,
@@ -359,8 +449,6 @@ export default function App() {
     setFilters(filterDraft);
     setFilterOpen(false);
   };
-
-  const initials = (currentUser || "MB").slice(0, 2).toUpperCase();
 
   return (
     <div className="page">
@@ -414,6 +502,7 @@ export default function App() {
           </div>
         </div>
       </header>
+
       <main className="grid">
         <section className="panel">
           <div className="panel-title-row">
@@ -455,6 +544,7 @@ export default function App() {
               </button>
             </div>
           </div>
+
           {filterOpen && (
             <div id="filters" className="filter-panel" role="region" aria-label="Filters">
               <div className="filter-list">
@@ -657,6 +747,54 @@ export default function App() {
                       <span className="value">{show(book.views)}</span>
                     </div>
                   </div>
+
+                  {/* ===== Comment Section ===== */}
+                  <div className="comments">
+                    <h4 className="comments-title">Comments</h4>
+
+                    {commentsLoading && <p className="muted">Loading comments…</p>}
+                    {commentsError && <p className="error">Error: {commentsError}</p>}
+                    {!commentsLoading && !commentsError && comments.length === 0 && (
+                      <p className="muted">No comments yet.</p>
+                    )}
+
+                    <ul className="comment-list">
+                      {comments.map((c, i) => {
+                        const mine = c.username && c.username === currentUser;
+                        return (
+                          <li key={i} className={"comment-item " + (mine ? "mine" : "other")}>
+                            <div className="comment-bubble">
+                              <div className="comment-text">{c.comment}</div>
+                              <div className="comment-meta">
+                                <span className="comment-user">@{c.username || "unknown"}</span>
+                                <span className="comment-dot">•</span>
+                                <span className="comment-time">{c.date_and_time || ""}</span>
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    <form className="comment-form" onSubmit={submitComment}>
+                      <input
+                        className="comment-input"
+                        placeholder={currentUser ? "Write a comment…" : "Log in to comment"}
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        disabled={!currentUser || postingComment}
+                      />
+                      <button
+                        className="btn btn-comment"
+                        type="submit"
+                        disabled={!currentUser || postingComment || !newComment.trim()}
+                        title={currentUser ? "Send comment" : "Log in to comment"}
+                      >
+                        {postingComment ? "Sending…" : "Send"}
+                      </button>
+                    </form>
+                  </div>
+                  {/* ===== End Comments ===== */}
                 </>
               )}
 
@@ -762,8 +900,7 @@ export default function App() {
             {addError && <p className="error">Error: {addError}</p>}
             <form className="edit-form" onSubmit={submitAdd}>
               <div className="edit-list">
-                <div className="edit-item">
-                </div>
+                <div className="edit-item"></div>
                 <div className="edit-item">
                   <label>Title</label>
                   <input
