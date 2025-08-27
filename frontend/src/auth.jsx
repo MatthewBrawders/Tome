@@ -85,19 +85,20 @@ export function AuthProvider({ children }) {
     setUserCookie(profile.username || u);
   }
 
-  // Google: username = email, password = sub
+  // Google: username = local part of email, password = sub
   async function upsertGoogle(email, sub) {
-    const u = (email ?? "").trim();
+    const local = (email ?? "").trim().split("@")[0].toLowerCase();
+    const u = sanitizeUsername(local);
     const p = (sub ?? "").trim();
-    if (!u || !p) throw new Error("Missing Google account info.");
-    // 1) Try login
+    if (!u || !p) throw new Error("Missing or invalid Google account info.");
+
     let res = await fetch(`${API}/profiles/login`, {
       ...CRED,
       method: "POST",
       body: JSON.stringify({ username: u, password: p }),
     });
+
     if (!res.ok) {
-      // 2) If login fails, try signup then login again
       await fetch(`${API}/profiles`, {
         ...CRED,
         method: "POST",
@@ -113,9 +114,11 @@ export function AuthProvider({ children }) {
         throw new Error(data?.detail || "Google sign-in failed");
       }
     }
-    const profile = (await readJson(res)) || { username: u };
-    setUser(profile);
-    setUserCookie(profile.username || u);
+
+    // Force client username to the stripped local-part
+    const profile = (await readJson(res)) || {};
+    setUser({ ...profile, username: u });
+    setUserCookie(u);
   }
 
   function logout() {
@@ -125,9 +128,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const cookieUser = getUserCookie();
-    if (cookieUser) {
-      setUser({ username: cookieUser });
-    }
+    if (cookieUser) setUser({ username: cookieUser });
     setLoading(false);
   }, []);
 
