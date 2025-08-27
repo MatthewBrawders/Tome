@@ -1,8 +1,8 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from bson import ObjectId
-from typing import Any, Dict
+from typing import Any, Dict, List
+from pymongo import ReturnDocument
 
-# Helpers to convert Mongo docs to JSON-friendly dicts
 def _serialize(doc: Dict[str, Any]) -> Dict[str, Any]:
     if not doc:
         return doc
@@ -34,10 +34,15 @@ class Mongo:
         if self.client:
             self.client.close()
 
-    # Generic helpers you can reuse if you add more managers later
-    async def find_all(self):
+    async def find_all(self) -> List[Dict[str, Any]]:
         assert self.collection is not None
         cursor = self.collection.find({})
+        return [_serialize(doc) async for doc in cursor]
+
+    async def find_many(self, filter_doc: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Added to support BooksRepository.find_by_user."""
+        assert self.collection is not None
+        cursor = self.collection.find(filter_doc)
         return [_serialize(doc) async for doc in cursor]
 
     async def find_one(self, oid: ObjectId):
@@ -52,6 +57,7 @@ class Mongo:
         return _serialize(doc)
 
     async def update_one(self, oid: ObjectId, data: Dict[str, Any]):
+        """$set wrapper for plain field updates."""
         assert self.collection is not None
         await self.collection.update_one({"_id": oid}, {"$set": data})
         doc = await self.collection.find_one({"_id": oid})
@@ -61,3 +67,26 @@ class Mongo:
         assert self.collection is not None
         res = await self.collection.delete_one({"_id": oid})
         return res.deleted_count == 1
+
+    async def find_one_and_update(
+        self,
+        filter_doc: Dict[str, Any],
+        update_doc: Dict[str, Any],
+        *,
+        return_document: ReturnDocument = ReturnDocument.AFTER,
+    ):
+        assert self.collection is not None
+        doc = await self.collection.find_one_and_update(
+            filter_doc,
+            update_doc,                       # supports $inc, $set, etc.
+            return_document=return_document,  # AFTER => post-update doc
+        )
+        return _serialize(doc) if doc else None
+
+    async def inc_views(self, oid: ObjectId):
+        """Convenience helper: increment views and return post-increment doc."""
+        return await self.find_one_and_update(
+            {"_id": oid},
+            {"$inc": {"views": 1}},
+            return_document=ReturnDocument.AFTER,
+        )

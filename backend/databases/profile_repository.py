@@ -1,8 +1,6 @@
-# ===== databases/profiles_repository.py =====
 from typing import Any, Dict, List, Optional
 from bson import ObjectId
 from databases.mongo import Mongo, to_object_id
-
 
 class ProfilesRepository:
     def __init__(self, uri: str, db_name: str, collection: str = "profiles"):
@@ -14,7 +12,6 @@ class ProfilesRepository:
     async def close(self):
         await self._mongo.close()
 
-    # --- CRUD (raw DB dicts in/out) ---
     async def find_all(self) -> List[Dict[str, Any]]:
         return await self._mongo.find_all()
 
@@ -32,3 +29,24 @@ class ProfilesRepository:
     async def delete_one(self, profile_id: str) -> bool:
         oid: ObjectId = to_object_id(profile_id)
         return await self._mongo.delete_one(oid)
+
+    async def find_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        docs = await self._mongo.find_all()
+        for d in docs:
+            if d.get("username") == username:
+                return d
+        return None
+
+    async def update_by_username(self, username: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        doc = await self.find_by_username(username)
+        if not doc:
+            return None
+        _id = doc.get("_id") or doc.get("id")
+        return await self.update_one(str(_id), data)
+
+    async def delete_by_username(self, username: str) -> bool:
+        doc = await self.find_by_username(username)
+        if not doc:
+            return False
+        _id = doc.get("_id") or doc.get("id")
+        return await self.delete_one(str(_id))

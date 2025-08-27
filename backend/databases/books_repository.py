@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 from bson import ObjectId
 from databases.mongo import Mongo, to_object_id
-
+from pymongo import ReturnDocument
 
 class BooksRepository:
     def __init__(self, uri: str, db_name: str, collection: str):
@@ -13,7 +13,6 @@ class BooksRepository:
     async def close(self):
         await self._mongo.close()
 
-    # --- CRUD (raw DB dicts in/out) ---
     async def find_all(self) -> List[Dict[str, Any]]:
         return await self._mongo.find_all()
 
@@ -31,8 +30,24 @@ class BooksRepository:
     async def delete_one(self, book_id: str) -> bool:
         oid: ObjectId = to_object_id(book_id)
         return await self._mongo.delete_one(oid)
-    
-    async def find_by_user(self, username: str) -> List[dict]:
-        cursor = self._collection.find({"username": username})
-        return await cursor.to_list(length=None)
 
+    async def find_by_user(self, username: str) -> List[Dict[str, Any]]:
+        # requires Mongo.find_many (implemented below in mongo.py)
+        return await self._mongo.find_many({"username": username})
+
+    async def find_one_and_inc_views(self, book_id: str) -> Optional[Dict[str, Any]]:
+        """Atomically increment views and return updated doc."""
+        oid: ObjectId = to_object_id(book_id)
+        doc = await self._mongo.find_one_and_update(
+            {"_id": oid},
+            {"$inc": {"views": 1}},
+            return_document=ReturnDocument.AFTER,
+        )
+        # Mongo.find_one_and_update already returns a serialized doc (with 'id')
+        return doc
+
+    async def update_fields(self, book_id: str, fields: dict) -> Optional[Dict[str, Any]]:
+        oid: ObjectId = to_object_id(book_id)
+        fields.pop("views", None)  # never let clients modify the counter
+        # Mongo.update_one expects plain fields and applies $set internally
+        return await self._mongo.update_one(oid, fields)

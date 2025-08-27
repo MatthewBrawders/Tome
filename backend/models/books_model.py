@@ -26,5 +26,6 @@ class BookUpdate(BaseModel):
 
 # Outgoing (what FastAPI returns)
 class BookOut(BookBase):
-  id: str = Field(..., description="Stringified ObjectId")
-  model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    id: str = Field(..., description="Stringified ObjectId")
+    views: int = 0
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
