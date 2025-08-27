@@ -1,5 +1,5 @@
-// src/pages/Signup.jsx
-import { useState } from "react";
+// src/pages/signup.jsx
+import { useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth.jsx";
 import { useNavigate, Link } from "react-router-dom";
 import tomeLogo from "../assets/tome_logo.png";
@@ -8,9 +8,63 @@ import "../css/signup.css";
 const setUserCookie = (u) =>
   (document.cookie = `tome_user=${encodeURIComponent(u)}; path=/; max-age=31536000; samesite=lax`);
 
+function decodeJwt(cred) {
+  const base64 = cred.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+  const json = decodeURIComponent(
+    atob(base64)
+      .split("")
+      .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+      .join("")
+  );
+  return JSON.parse(json);
+}
+
+function GoogleButton({ onCred }) {
+  const btnRef = useRef(null);
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+
+  useEffect(() => {
+    if (!clientId) return;
+    const id = "google-identity-script";
+    if (!document.getElementById(id)) {
+      const s = document.createElement("script");
+      s.src = "https://accounts.google.com/gsi/client";
+      s.async = true;
+      s.defer = true;
+      s.id = id;
+      s.onload = init;
+      document.head.appendChild(s);
+    } else {
+      init();
+    }
+    function init() {
+      // eslint-disable-next-line no-undef
+      if (window.google && window.google.accounts && btnRef.current) {
+        // eslint-disable-next-line no-undef
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (resp) => onCred(resp.credential),
+        });
+        // eslint-disable-next-line no-undef
+        google.accounts.id.renderButton(btnRef.current, {
+          type: "standard",
+          shape: "pill",
+          theme: "outline",
+          size: "large",
+          text: "signup_with",
+          logo_alignment: "left",
+        });
+      }
+    }
+  }, [clientId, onCred]);
+
+  if (!clientId) return null;
+  return <div className="g-wrap"><div ref={btnRef} /></div>;
+}
+
 export default function Signup() {
   const nav = useNavigate();
-  const { signup, register, login } = useAuth();
+  const { signup, register, login, upsertGoogle } = useAuth();
   const doSignup = signup || register || login;
 
   const [username, setU] = useState("");
@@ -40,6 +94,22 @@ export default function Signup() {
     }
   }
 
+  async function onGoogleCredential(credential) {
+    try {
+      setErr("");
+      setBusy(true);
+      const payload = decodeJwt(credential);
+      const email = payload?.email;
+      const sub = payload?.sub;
+      await upsertGoogle(email, sub);
+      nav("/");
+    } catch (e) {
+      setErr(e.message || "Google sign-up failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="signup-page">
       <div className="signup-hero">
@@ -51,6 +121,8 @@ export default function Signup() {
 
       <form onSubmit={onSubmit} className="auth-card signup-form">
         <h2 className="card-title">Create your account</h2>
+
+        <GoogleButton onCred={onGoogleCredential} />
 
         <label className="field">
           <span>Username</span>

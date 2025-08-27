@@ -35,7 +35,7 @@ function getUserCookie() {
   return m ? decodeURIComponent(m[1]) : "";
 }
 function setUserCookie(username) {
-  document.cookie = `tome_user=${encodeURIComponent(username)}; path=/; samesite=lax`;
+  document.cookie = `tome_user=${encodeURIComponent(username)}; path=/; samesite=lax; max-age=31536000`;
 }
 function clearUserCookie() {
   document.cookie = "tome_user=; path=/; max-age=0; samesite=lax";
@@ -85,6 +85,39 @@ export function AuthProvider({ children }) {
     setUserCookie(profile.username || u);
   }
 
+  // Google: username = email, password = sub
+  async function upsertGoogle(email, sub) {
+    const u = (email ?? "").trim();
+    const p = (sub ?? "").trim();
+    if (!u || !p) throw new Error("Missing Google account info.");
+    // 1) Try login
+    let res = await fetch(`${API}/profiles/login`, {
+      ...CRED,
+      method: "POST",
+      body: JSON.stringify({ username: u, password: p }),
+    });
+    if (!res.ok) {
+      // 2) If login fails, try signup then login again
+      await fetch(`${API}/profiles`, {
+        ...CRED,
+        method: "POST",
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      res = await fetch(`${API}/profiles/login`, {
+        ...CRED,
+        method: "POST",
+        body: JSON.stringify({ username: u, password: p }),
+      });
+      if (!res.ok) {
+        const data = await readJson(res);
+        throw new Error(data?.detail || "Google sign-in failed");
+      }
+    }
+    const profile = (await readJson(res)) || { username: u };
+    setUser(profile);
+    setUserCookie(profile.username || u);
+  }
+
   function logout() {
     clearUserCookie();
     setUser(null);
@@ -99,7 +132,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, signup, logout }}>
+    <AuthCtx.Provider value={{ user, loading, login, signup, logout, upsertGoogle }}>
       {children}
     </AuthCtx.Provider>
   );
