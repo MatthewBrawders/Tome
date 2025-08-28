@@ -82,7 +82,7 @@ flowchart TD
     Domain --> API
 ```
 
-## Environment Configuration
+## Environment Configuration (Before trying to run, you MUST add a .env in the backend/ foldeer and the frontend/ folders)
 
 ### Backend Configuration (`backend/.env`)
 ```env
