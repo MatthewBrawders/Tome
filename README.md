@@ -5,7 +5,7 @@ A full-stack application for sharing and discovering book reviews. Built with a 
 ## Features
 
 ### Reviews
-- **CRUD Operations**: Create, read, update, and delete book reviews
+- **CRUD Operations**: Create, read, update, and delete book reviews (only that user can delete or edit their review)
 - **Review Fields**: Title, author, genre, year, cover image, and review text
 - **Auto-Attribution**: Username automatically pulled from `tome_user` cookie
 
@@ -13,7 +13,6 @@ A full-stack application for sharing and discovering book reviews. Built with a 
 - Add comments on any book review
 - **Visual Distinction**: Your comments appear in blue, others in gray
 - **Metadata**: Each comment displays username and timestamp
-- **Authentication Required**: Must be logged in to comment
 
 ### Filtering & Discovery
 - **Search**: Find books by title, author, review content, or username
@@ -33,7 +32,7 @@ A full-stack application for sharing and discovering book reviews. Built with a 
 - **Expandable View**: Click any book to see detailed information
 - **Complete Info**: Title, author, genre, year, review, cover image, views, and ID
 - **Graceful Fallbacks**: Handles missing or broken cover images
-- **Easy Navigation**: Close with another click or Esc key
+- **Easy Navigation**: Close with another click or 'Esc' key
 
 ### Authentication
 - **Cookie-Based Login**: Simple `tome_user=<username>` cookie system
