@@ -100,49 +100,9 @@ VITE_APP_NAME=Tome
 VITE_GOOGLE_CLIENT_ID=[your-google-client-id].apps.googleusercontent.com
 ```
 
-> **Note**: When running frontend and backend separately, set `VITE_API_BASE_URL=http://localhost:8000`
+> **Note**: MAKE SURE YOUR TERMINAL IS RUNNING IN GITBASH! Then do this command: chmod +x dev
 
 ## Quick Start
-
-### Docker (Recommended)
-```bash
-# Start the full stack
-docker compose up --build -d
-
-# Access the application
-# - With NGINX proxy: http://localhost:8080
-# - Direct Vite access: http://localhost:5173
-# - Backend API docs: http://localhost:8000/docs
-
-# Stop the application
-docker compose down
-
-# Stop and clear database
-docker compose down -v
-```
-
-### Local Development
-
-#### Backend Setup
-```bash
-cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
-```
-
-#### Frontend Setup
-```bash
-cd frontend
-npm install
-npm run dev
-# Visit http://localhost:5173
-```
-
-#### Testing Authentication
-Set your cookie manually in browser storage:
-```
-tome_user = yourusername
-```
 
 ## Development Helper Script
 
@@ -182,11 +142,17 @@ TITLE="PLEASE PLEASE PLEASE" AUTHOR="Matthew Brawders" YEAR=9999 BOOK_USERNAME="
 
 ### Example Workflow
 ```bash
+
+# Open Docker Desktop (Must be open before starting the containers)
+
 # Start development environment
 ./dev up
 
-# Create test data
-BOOK_USERNAME="alice" ./dev create "The Great Gatsby" "F. Scott Fitzgerald" 1925 "Fiction"
+# Containers start up and website auto opens
+
+# Use frontend to make reviews and test everything out
+
+# Check the backend container in docker 
 
 # View all books
 ./dev books
