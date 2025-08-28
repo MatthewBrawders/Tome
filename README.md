@@ -100,13 +100,12 @@ VITE_APP_NAME=Tome
 VITE_GOOGLE_CLIENT_ID=[your-google-client-id].apps.googleusercontent.com
 ```
 
-> **Note**: MAKE SURE YOUR TERMINAL IS RUNNING IN GITBASH! Then do this command: chmod +x dev
-
 ## Quick Start
 
 ## Development Helper Script
 
 The project includes a convenient `./dev` script to streamline development tasks.
+> **Note**: MAKE SURE YOUR TERMINAL IS RUNNING IN GITBASH! Then do this command: chmod +x dev
 
 ### Basic Commands
 ```bash
