@@ -703,3 +703,38 @@ body {
 }
 .btn-comment:active { transform: translateY(1px); }
 .btn-comment:disabled { opacity: 0.6; cursor: not-allowed; }
+
+
+/*------ Me button for only my book review toggle -------*/
+.btn-mine {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.75);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  transition:
+    transform .08s ease,
+    border-color .15s ease,
+    color .15s ease,
+    box-shadow .15s ease,
+    background .15s ease;
+}
+
+.btn-mine .btn-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-mine:hover,
+.btn-mine.active {
+  border-color: var(--mine, #4ea3ff);
+  color: var(--mine, #4ea3ff);
+  background: rgba(78,163,255,0.08);
+  box-shadow:
+    0 0 10px rgba(78,163,255,0.6),
+    0 0 20px rgba(78,163,255,0.35);
+}

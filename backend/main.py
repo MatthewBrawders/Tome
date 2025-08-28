@@ -180,3 +180,13 @@ async def list_comments_by_book(book_id: str, limit: int = 100, skip: int = 0):
 async def list_comments_by_user(username: str, limit: int = 100, skip: int = 0):
     assert comments is not None
     return await comments.list_comments_by_user(username, limit=limit, skip=skip)
+
+
+# Deleting book now needs to delete comments too so that it leaves no dangling pointers
+@app.delete("/books/{book_id}", status_code=204)
+async def delete_book(book_id: str):
+    assert books is not None and comments is not None
+    ok = await books.delete_book(book_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Book not found")
+    await comments.delete_comments_by_book(book_id)

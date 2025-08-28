@@ -64,3 +64,9 @@ class CommentsRepository:
             .limit(limit)
         )
         return [_serialize(doc) async for doc in cursor]
+    
+    async def delete_by_book(self, book_id: str) -> int:
+        assert self._mongo.collection is not None
+        res = await self._mongo.collection.delete_many({"book_id": book_id})
+        return res.deleted_count
+

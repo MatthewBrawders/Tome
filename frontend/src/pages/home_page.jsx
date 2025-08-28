@@ -24,6 +24,7 @@ const getBookId = (bk, fallbackId) => {
   }
   return null;
 };
+const norm = (s) => String(s ?? "").trim().toLowerCase();
 
 const DEFAULT_FILTERS = {
   q: "",
@@ -108,6 +109,11 @@ export default function App() {
 
   const show = (v) => (v === 0 || v ? String(v) : "—");
   const initials = (currentUser || "MB").slice(0, 2).toUpperCase();
+
+  const isOwner = React.useMemo(() => {
+    if (!book || !currentUser) return false;
+    return norm(book.username) === norm(currentUser);
+  }, [book, currentUser]);
 
   // initial load
   useEffect(() => {
@@ -293,17 +299,21 @@ export default function App() {
     return list;
   }, [books, filters, filterDraft.yearMin, filterDraft.yearMax, recommendOn]);
 
+  const [showMineOnly, setShowMineOnly] = useState(false);
+
+  const visibleBooks = useMemo(() => {
+    const base = Array.isArray(filteredBooks) ? filteredBooks : [];
+    if (!showMineOnly || !currentUser) return base;
+    return base.filter(b => norm(b?.username) === norm(currentUser));
+  }, [filteredBooks, showMineOnly, currentUser]);
+
   const hasBooks = useMemo(
-    () => Array.isArray(filteredBooks) && filteredBooks.length > 0,
-    [filteredBooks]
+    () => Array.isArray(visibleBooks) && visibleBooks.length > 0,
+    [visibleBooks]
   );
 
-  const handleBookClick = (id) => {
-    setSelectedId((cur) => (cur === id ? null : id));
-  };
-
   const beginEdit = () => {
-    if (!book) return;
+    if (!book || !isOwner) return;   
     setForm({
       title: book.title ?? "",
       author: book.author ?? "",
@@ -317,7 +327,11 @@ export default function App() {
     setEditMode(true);
   };
 
-  const openConfirm = () => setConfirmOpen(true);
+  const openConfirm = () => {
+      if (!isOwner) return;        
+      setConfirmOpen(true);
+  };
+
   const closeConfirm = () => setConfirmOpen(false);
 
   const openAdd = () => {
@@ -342,7 +356,7 @@ export default function App() {
 
   const submitEdit = async (e) => {
     e.preventDefault();
-    if (!selectedId) return;
+    if (!selectedId || !isOwner) return;
     setEditSaving(true);
     setEditError("");
     const payload = {
@@ -385,6 +399,13 @@ export default function App() {
     }
   };
 
+  // select a book from the list
+  const handleBookClick = React.useCallback((id) => {
+    if (!id) return;
+    setSelectedId(id);
+  }, []);
+
+
   const handleDelete = async () => {
     if (!selectedId) return;
     try {
@@ -396,7 +417,6 @@ export default function App() {
       setSelectedId(null);
       setBook(null);
       setEditMode(false);
-      // also clear comments
       setComments([]);
       setCommentsError("");
     } catch (err) {
@@ -507,44 +527,71 @@ export default function App() {
         <section className="panel">
           <div className="panel-title-row">
             <h2 className="panel-title">All Book Reviews</h2>
-
-            <div className="panel-actions">
-              <button
-                className={"btn btn-circle btn-recommend" + (recommendOn ? " active" : "")}
-                onClick={() => setRecommendOn(v => !v)}
-                aria-pressed={recommendOn}
-                title={recommendOn ? "Showing recommendations (most views)" : "Recommend by most views"}
-              >
-                <svg
-                  className="btn-icon"
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              <div className="panel-actions">
+                {/* My Reviews Toggle */}
+                <button
+                  className={"btn btn-circle btn-mine" + (showMineOnly ? " active" : "")}
+                  onClick={() => setShowMineOnly(v => !v)}
+                  aria-pressed={showMineOnly}
+                  title={showMineOnly ? "Showing only your reviews" : "Show only your reviews"}
                 >
-                  <path d="M7 10v12H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h3z"/>
-                  <path d="M7 22h11a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-5.31l.95-4.57a1 1 0 0 0-.2-.82l-1-1.2a1 1 0 0 0-1.64.13L7 10"/>
-                </svg>
-              </button>
-
-              <button
-                className={"btn btn-circle" + (filterOpen ? " active" : "")}
-                onClick={toggleFilter}
-                aria-expanded={filterOpen}
-                aria-controls="filters"
-                title="Filter books"
-              >
-                <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                  <circle cx="11" cy="11" r="7"></circle>
-                  <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
-                </svg>
-              </button>
-            </div>
+                  <svg
+                    className="btn-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    width="20"
+                    height="20"
+                    aria-hidden="true"
+                  >
+                    <text
+                      x="12"
+                      y="16"
+                      textAnchor="middle"
+                      fontFamily="Inter, system-ui, sans-serif"
+                      fontWeight="800"
+                      fontSize="12"
+                      fill="currentColor"
+                    >
+                      me
+                    </text>
+                  </svg>
+                </button>
+                {/* Recommend Toggle */}
+                <button
+                  className={"btn btn-circle btn-recommend" + (recommendOn ? " active" : "")}
+                  onClick={() => setRecommendOn(v => !v)}
+                  aria-pressed={recommendOn}
+                  title={recommendOn ? "Showing recommendations (most views)" : "Recommend by most views"}
+                >
+                  <svg
+                    className="btn-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M7 10v12H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h3z"/>
+                    <path d="M7 22h11a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-5.31l.95-4.57a1 1 0 0 0-.2-.82l-1-1.2a1 1 0 0 0-1.64.13L7 10"/>
+                  </svg>
+                </button>
+                {/*Filter Button */}
+                <button
+                  className={"btn btn-circle" + (filterOpen ? " active" : "")}
+                  onClick={toggleFilter}
+                  aria-expanded={filterOpen}
+                  aria-controls="filters"
+                  title="Filter books"
+                >
+                  <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <circle cx="11" cy="11" r="7"></circle>
+                    <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                  </svg>
+                </button>
+              </div>
           </div>
-
           {filterOpen && (
             <div id="filters" className="filter-panel" role="region" aria-label="Filters">
               <div className="filter-list">
@@ -640,7 +687,7 @@ export default function App() {
           {!listLoading && !hasBooks && !listError && <p className="muted">No books yet.</p>}
 
           <ul className="book-list">
-            {filteredBooks.map((b) => {
+            {visibleBooks.map((b) => {
               const id = b.id || b._id || b.book_id;
               return (
                 <li key={id}>
@@ -677,7 +724,7 @@ export default function App() {
                       <div className="details-subtitle">by {show(book.username)}</div>
                     ) : null}
                   </div>
-                  {!editMode && (
+                  {!editMode && isOwner &&(
                     <div className="details-actions">
                       <button className="btn btn-edit" onClick={beginEdit} title="Edit">
                         <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
