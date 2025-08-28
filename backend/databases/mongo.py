@@ -78,8 +78,8 @@ class Mongo:
         assert self.collection is not None
         doc = await self.collection.find_one_and_update(
             filter_doc,
-            update_doc,                       # supports $inc, $set, etc.
-            return_document=return_document,  # AFTER => post-update doc
+            update_doc,                      
+            return_document=return_document, 
         )
         return _serialize(doc) if doc else None
 

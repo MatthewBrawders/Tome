@@ -68,12 +68,12 @@ class BooksManager:
 
     async def create_book(self, data: BookCreate) -> BookOut:
         payload = data.model_dump()
-        payload.setdefault("views", 0)  # default counter
+        payload.setdefault("views", 0) 
         doc = await self._repo.insert_one(payload)
         return _to_out(doc)
 
     async def update_book(self, book_id: str, payload: dict):
-        payload = {k: v for k, v in payload.items() if k != "views"}  # guard the counter
+        payload = {k: v for k, v in payload.items() if k != "views"} 
         return await self._repo.update_fields(book_id, payload)
 
     async def delete_book(self, book_id: str) -> bool:

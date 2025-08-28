@@ -38,14 +38,11 @@ function GoogleButton({ onCred }) {
       init();
     }
     function init() {
-      // eslint-disable-next-line no-undef
       if (window.google && window.google.accounts && btnRef.current) {
-        // eslint-disable-next-line no-undef
         google.accounts.id.initialize({
           client_id: clientId,
           callback: (resp) => onCred(resp.credential),
         });
-        // eslint-disable-next-line no-undef
         google.accounts.id.renderButton(btnRef.current, {
           type: "standard",
           shape: "pill",

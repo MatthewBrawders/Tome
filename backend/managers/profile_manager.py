@@ -63,9 +63,7 @@ class ProfilesManager:
 
         if payload.get("password"):
             payload["password_hash"] = hash_password(payload["password"])
-            # keep a copy just for debug visibility
             debug_payload_before_insert = dict(payload)
-            # remove plain password before insert
             payload.pop("password", None)
         else:
             debug_payload_before_insert = dict(payload)

@@ -32,7 +32,6 @@ class BooksRepository:
         return await self._mongo.delete_one(oid)
 
     async def find_by_user(self, username: str) -> List[Dict[str, Any]]:
-        # requires Mongo.find_many (implemented below in mongo.py)
         return await self._mongo.find_many({"username": username})
 
     async def find_one_and_inc_views(self, book_id: str) -> Optional[Dict[str, Any]]:
@@ -43,11 +42,9 @@ class BooksRepository:
             {"$inc": {"views": 1}},
             return_document=ReturnDocument.AFTER,
         )
-        # Mongo.find_one_and_update already returns a serialized doc (with 'id')
         return doc
 
     async def update_fields(self, book_id: str, fields: dict) -> Optional[Dict[str, Any]]:
         oid: ObjectId = to_object_id(book_id)
-        fields.pop("views", None)  # never let clients modify the counter
-        # Mongo.update_one expects plain fields and applies $set internally
+        fields.pop("views", None)
         return await self._mongo.update_one(oid, fields)

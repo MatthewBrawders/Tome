@@ -4,6 +4,7 @@
   --muted: #8a93a1;
   --text: #e6edf3;
   --accent: #ffdd55;
+  --accent-link: #de3b3b; 
   --accent-quiet: #3a320f;
   --error: #ff6b6b;
   --ring: #d6b622;
@@ -738,3 +739,71 @@ body {
     0 0 10px rgba(78,163,255,0.6),
     0 0 20px rgba(78,163,255,0.35);
 }
+
+
+/*------ Profile Stuff -----*/
+
+.comment-user.linklike { color: var(--accent-link); }
+
+.linklike {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--accent, #eb3c3c);
+  cursor: pointer;
+}
+.linklike:hover { text-decoration: underline; }
+.modal-backdrop.profile { background: rgba(0,0,0,0.4); }
+
+/* ---- Close (X) button: ---- */
+.profile-close {
+  transition: box-shadow .15s ease, background .15s ease, border-color .15s ease, transform .08s ease;
+  border: 1px solid var(--border, rgba(255,255,255,0.25));
+}
+.profile-close:hover,
+.profile-close:focus-visible {
+  background: rgba(255, 59, 59, 0.10);
+  border-color: rgba(255, 59, 59, 0.45);
+  box-shadow: 0 0 0 3px rgba(255, 59, 59, 0.35);
+}
+
+.profile-scroll {
+  margin-top: 12px;
+  max-height: 360px;
+  overflow: auto;
+
+  padding: 6px 10px 6px 6px;
+
+  scrollbar-gutter: stable both-edges;
+  border-radius: 12px;
+}
+
+.profile-scroll .book-item {
+  width: 100%;
+  text-align: left;
+  border-radius: 12px;
+
+  border: 1px solid transparent;
+
+  transition: box-shadow .15s ease, transform .08s ease, background .15s ease, border-color .15s ease;
+  will-change: box-shadow;
+}
+.profile-scroll .book-item:hover {
+  background: rgba(255,255,255,0.04);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.08) inset;
+}
+
+.profile-scroll li { margin: 6px 0; }
+
+
+.profile-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.25) transparent; }
+
+.profile-scroll::-webkit-scrollbar { width: 10px; }
+.profile-scroll::-webkit-scrollbar-track { background: transparent; }
+.profile-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.25);
+  border-radius: 8px;
+  border: 2px solid transparent; 
+  background-clip: padding-box;
+}
+.profile-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.35); }

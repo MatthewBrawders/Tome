@@ -1,5 +1,5 @@
-// src/pages/home_page.jsx (App)
-import React, { useEffect, useMemo, useState, useRef } from "react";
+// src/pages/home_page.jsx
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import tomeLogo from "../assets/tome_logo.png";
 
 const API_BASE = (
@@ -15,7 +15,6 @@ const getUserCookie = () => {
 const clearUserCookie = () =>
   (document.cookie = "tome_user=; path=/; max-age=0; samesite=lax");
 
-// utils
 const formatDateTime = () => new Date().toLocaleString();
 const getBookId = (bk, fallbackId) => {
   const candidates = [bk?.id, bk?._id, bk?.book_id, fallbackId];
@@ -39,6 +38,12 @@ const DEFAULT_FILTERS = {
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState(getUserCookie());
+
+  const [profileOpenModal, setProfileOpenModal] = useState(false);
+  const [profileUser, setProfileUser] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileReviews, setProfileReviews] = useState([]);
 
   const [books, setBooks] = useState([]);
   const [listLoading, setListLoading] = useState(true);
@@ -97,10 +102,8 @@ export default function App() {
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [filterDraft, setFilterDraft] = useState(DEFAULT_FILTERS);
 
-  // recommend toggle
   const [recommendOn, setRecommendOn] = useState(false);
 
-  // comments state
   const [comments, setComments] = useState([]);
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsError, setCommentsError] = useState("");
@@ -110,12 +113,11 @@ export default function App() {
   const show = (v) => (v === 0 || v ? String(v) : "—");
   const initials = (currentUser || "MB").slice(0, 2).toUpperCase();
 
-  const isOwner = React.useMemo(() => {
+  const isOwner = useMemo(() => {
     if (!book || !currentUser) return false;
     return norm(book.username) === norm(currentUser);
   }, [book, currentUser]);
 
-  // initial load
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -135,18 +137,17 @@ export default function App() {
     return () => { cancelled = true; };
   }, []);
 
-  // load details + comments on select
   useEffect(() => {
     if (!selectedId) {
       setBook(null);
       setBookError("");
       setEditMode(false);
-      // clear comments when nothing selected
       setComments([]);
       setCommentsError("");
       setNewComment("");
       return;
     }
+    if (profileOpenModal) closeProfile();
     let cancelled = false;
     (async () => {
       try {
@@ -159,7 +160,6 @@ export default function App() {
           setBook(data);
           setEditMode(false);
           setEditError("");
-          // refresh comments for this book
           refreshComments(data);
         }
       } catch (err) {
@@ -175,7 +175,6 @@ export default function App() {
     return () => { cancelled = true; };
   }, [selectedId]);
 
-  // comments helpers
   async function refreshComments(bookLike) {
     const bid = getBookId(bookLike || book, selectedId);
     if (bid === null) {
@@ -201,7 +200,6 @@ export default function App() {
     e.preventDefault();
     const username = getUserCookie();
     const bid = getBookId(book, selectedId);
-
     if (!username) {
       setCommentsError("You must be logged in to comment.");
       return;
@@ -210,17 +208,14 @@ export default function App() {
       setCommentsError("Book ID missing.");
       return;
     }
-
     const text = newComment.trim();
     if (!text) return;
-
     const payload = {
       username,
-      book_id: String(bid),  // <-- always string
+      book_id: String(bid),
       comment: text,
-      date_and_time: new Date().toLocaleString(),
+      date_and_time: formatDateTime(),
     };
-
     try {
       setPostingComment(true);
       setCommentsError("");
@@ -313,7 +308,7 @@ export default function App() {
   );
 
   const beginEdit = () => {
-    if (!book || !isOwner) return;   
+    if (!book || !isOwner) return;
     setForm({
       title: book.title ?? "",
       author: book.author ?? "",
@@ -328,8 +323,8 @@ export default function App() {
   };
 
   const openConfirm = () => {
-      if (!isOwner) return;        
-      setConfirmOpen(true);
+    if (!isOwner) return;
+    setConfirmOpen(true);
   };
 
   const closeConfirm = () => setConfirmOpen(false);
@@ -399,12 +394,19 @@ export default function App() {
     }
   };
 
-  // select a book from the list
-  const handleBookClick = React.useCallback((id) => {
-    if (!id) return;
-    setSelectedId(id);
-  }, []);
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e) => {
+      if (e.key === "Escape") setSelectedId(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [selectedId]);
 
+  const handleBookClick = useCallback((id) => {
+    if (!id) return;
+    setSelectedId((prev) => (prev === id ? null : id));
+  }, []);
 
   const handleDelete = async () => {
     if (!selectedId) return;
@@ -470,6 +472,52 @@ export default function App() {
     setFilterOpen(false);
   };
 
+  async function openProfile(usernameFromClick) {
+    setProfileOpen(false);
+    const u = (usernameFromClick || getUserCookie() || "").trim();
+    if (!u) {
+      alert("No user found. Log in first.");
+      return;
+    }
+    setProfileUser(u);
+    setProfileOpenModal(true);
+    setProfileLoading(true);
+    setProfileError("");
+    setProfileReviews([]);
+    try {
+      const res = await fetch(`${API_BASE}/books/by/${encodeURIComponent(u)}`);
+      if (!res.ok) throw new Error(`Failed: ${res.status}`);
+      const data = await res.json();
+      setProfileReviews(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setProfileError(e?.message || "Failed to load profile.");
+    } finally {
+      setProfileLoading(false);
+    }
+  }
+
+  function closeProfile() {
+    setProfileOpenModal(false);
+  }
+
+  function goToReviewAndClose(bk) {
+    const id = bk?.id || bk?._id || bk?.book_id;
+    if (!id) return;
+    setSelectedId(id);
+    closeProfile();
+    setTimeout(() => {
+      const h = document.querySelector(".panel .panel-title");
+      if (h) h.focus?.();
+    }, 0);
+  }
+
+  useEffect(() => {
+    if (!profileOpenModal) return;
+    const onKey = (e) => { if (e.key === "Escape") closeProfile(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [profileOpenModal]);
+
   return (
     <div className="page">
       <header className="header nav">
@@ -505,7 +553,7 @@ export default function App() {
               {currentUser ? currentUser : "Profile"} <span className="chev">▾</span>
             </button>
             <div className="profile-menu" role="menu">
-              <button role="menuitem" onClick={() => alert("View Profile clicked (placeholder for now)")}>
+              <button role="menuitem" onClick={() => openProfile()}>
                 View Profile
               </button>
               <button
@@ -523,75 +571,136 @@ export default function App() {
         </div>
       </header>
 
+      {profileOpenModal && (
+        <div
+          className="modal-backdrop profile"
+          role="dialog"
+          aria-modal="true"
+          style={{ backdropFilter: "blur(4px)" }}
+          onClick={(e) => {
+            if (e.currentTarget === e.target) closeProfile();
+          }}
+        >
+          <div className="modal" style={{ maxWidth: 560 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <h4 style={{ margin: 0 }}>
+                Profile: <span style={{ opacity: 0.9 }}>{profileUser || "—"}</span>
+              </h4>
+              <button
+                className="btn btn-cancel profile-close"
+                aria-label="Close profile"
+                title="Close"
+                onClick={closeProfile}
+              >
+                ✕
+              </button>
+            </div>
+
+            {profileLoading && <p className="muted" style={{ marginTop: 12 }}>Loading profile…</p>}
+            {profileError && <p className="error" style={{ marginTop: 12 }}>Error: {profileError}</p>}
+
+            {!profileLoading && !profileError && (
+              <>
+                {(!profileReviews || profileReviews.length === 0) ? (
+                  <p className="muted" style={{ marginTop: 12 }}>No reviews yet.</p>
+                ) : (
+                  <ul className="book-list profile-scroll">
+                    {profileReviews.map((b) => {
+                      const id = b.id || b._id || b.book_id;
+                      return (
+                        <li key={id}>
+                          <button
+                            className="book-item"
+                            onClick={() => goToReviewAndClose(b)}
+                            title="Open review"
+                            style={{ width: "100%" }}
+                          >
+                            <span className="book-title">{b.title || "Untitled"}</span>
+                            <span className="book-meta">
+                              {b.author ? <span className="book-user">by {b.author}</span> : null}
+                              {typeof b.year !== "undefined" && b.year !== null ? (
+                                <span style={{ marginLeft: 8, opacity: 0.7 }}>• {b.year}</span>
+                              ) : null}
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       <main className="grid">
         <section className="panel">
           <div className="panel-title-row">
-            <h2 className="panel-title">All Book Reviews</h2>
-              <div className="panel-actions">
-                {/* My Reviews Toggle */}
-                <button
-                  className={"btn btn-circle btn-mine" + (showMineOnly ? " active" : "")}
-                  onClick={() => setShowMineOnly(v => !v)}
-                  aria-pressed={showMineOnly}
-                  title={showMineOnly ? "Showing only your reviews" : "Show only your reviews"}
+            <h2 className="panel-title" tabIndex={-1}>All Book Reviews</h2>
+            <div className="panel-actions">
+              <button
+                className={"btn btn-circle btn-mine" + (showMineOnly ? " active" : "")}
+                onClick={() => setShowMineOnly(v => !v)}
+                aria-pressed={showMineOnly}
+                title={showMineOnly ? "Showing only your reviews" : "Show only your reviews"}
+              >
+                <svg
+                  className="btn-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  width="20"
+                  height="20"
+                  aria-hidden="true"
                 >
-                  <svg
-                    className="btn-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    width="20"
-                    height="20"
-                    aria-hidden="true"
+                  <text
+                    x="12"
+                    y="16"
+                    textAnchor="middle"
+                    fontFamily="Inter, system-ui, sans-serif"
+                    fontWeight="800"
+                    fontSize="12"
+                    fill="currentColor"
                   >
-                    <text
-                      x="12"
-                      y="16"
-                      textAnchor="middle"
-                      fontFamily="Inter, system-ui, sans-serif"
-                      fontWeight="800"
-                      fontSize="12"
-                      fill="currentColor"
-                    >
-                      me
-                    </text>
-                  </svg>
-                </button>
-                {/* Recommend Toggle */}
-                <button
-                  className={"btn btn-circle btn-recommend" + (recommendOn ? " active" : "")}
-                  onClick={() => setRecommendOn(v => !v)}
-                  aria-pressed={recommendOn}
-                  title={recommendOn ? "Showing recommendations (most views)" : "Recommend by most views"}
+                    me
+                  </text>
+                </svg>
+              </button>
+              <button
+                className={"btn btn-circle btn-recommend" + (recommendOn ? " active" : "")}
+                onClick={() => setRecommendOn(v => !v)}
+                aria-pressed={recommendOn}
+                title={recommendOn ? "Showing recommendations (most views)" : "Recommend by most views"}
+              >
+                <svg
+                  className="btn-icon"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 >
-                  <svg
-                    className="btn-icon"
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M7 10v12H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h3z"/>
-                    <path d="M7 22h11a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-5.31l.95-4.57a1 1 0 0 0-.2-.82l-1-1.2a1 1 0 0 0-1.64.13L7 10"/>
-                  </svg>
-                </button>
-                {/*Filter Button */}
-                <button
-                  className={"btn btn-circle" + (filterOpen ? " active" : "")}
-                  onClick={toggleFilter}
-                  aria-expanded={filterOpen}
-                  aria-controls="filters"
-                  title="Filter books"
-                >
-                  <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                    <circle cx="11" cy="11" r="7"></circle>
-                    <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
-                  </svg>
-                </button>
-              </div>
+                  <path d="M7 10v12H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h3z"/>
+                  <path d="M7 22h11a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-5.31l.95-4.57a1 1 0 0 0-.2-.82l-1-1.2a1 1 0 0 0-1.64.13L7 10"/>
+                </svg>
+              </button>
+              <button
+                className={"btn btn-circle" + (filterOpen ? " active" : "")}
+                onClick={toggleFilter}
+                aria-expanded={filterOpen}
+                aria-controls="filters"
+                title="Filter books"
+              >
+                <svg className="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <circle cx="11" cy="11" r="7"></circle>
+                  <line x1="16.65" y1="16.65" x2="21" y2="21"></line>
+                </svg>
+              </button>
+            </div>
           </div>
+
           {filterOpen && (
             <div id="filters" className="filter-panel" role="region" aria-label="Filters">
               <div className="filter-list">
@@ -708,7 +817,7 @@ export default function App() {
         </section>
 
         <section className="panel">
-          <h2 className="panel-title">Book Details</h2>
+          <h2 className="panel-title" tabIndex={-1}>Book Details</h2>
 
           {!selectedId && <p className="muted">Select a book to see details.</p>}
           {bookLoading && <p className="muted">Loading details…</p>}
@@ -795,7 +904,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* ===== Comment Section ===== */}
                   <div className="comments">
                     <h4 className="comments-title">Comments</h4>
 
@@ -813,7 +921,14 @@ export default function App() {
                             <div className="comment-bubble">
                               <div className="comment-text">{c.comment}</div>
                               <div className="comment-meta">
-                                <span className="comment-user">@{c.username || "unknown"}</span>
+                                <button
+                                  type="button"
+                                  className="comment-user linklike"
+                                  onClick={() => openProfile(c.username)}
+                                  title={`View ${c.username}'s profile`}
+                                >
+                                  @{c.username || "unknown"}
+                                </button>
                                 <span className="comment-dot">•</span>
                                 <span className="comment-time">{c.date_and_time || ""}</span>
                               </div>
@@ -841,7 +956,6 @@ export default function App() {
                       </button>
                     </form>
                   </div>
-                  {/* ===== End Comments ===== */}
                 </>
               )}
 

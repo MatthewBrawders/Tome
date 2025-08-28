@@ -26,11 +26,11 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://mongo:27017")
 DB_NAME = os.environ.get("MONGO_DB_NAME", "booksdb")
 BOOKS_COLLECTION = os.environ.get("MONGO_COLLECTION", "books")
 PROFILES_COLLECTION = os.environ.get("MONGO_PROFILES", "profiles")
-COMMENTS_COLLECTION = os.environ.get("MONGO_COMMENTS", "comments")  # <-- added
+COMMENTS_COLLECTION = os.environ.get("MONGO_COMMENTS", "comments")  
 
 books: BooksManager | None = None
 profiles: ProfilesManager | None = None
-comments: CommentsManager | None = None  # <-- added
+comments: CommentsManager | None = None 
 
 @app.on_event("startup")
 async def _startup():
@@ -73,17 +73,9 @@ async def update_book(book_id: str, data: BookUpdate):
     payload = data.model_dump(exclude_unset=True, exclude_none=True)
     if not payload:
         raise HTTPException(status_code=400, detail="No fields to update")
-    payload.pop("views", None)  # never let clients edit the counter
+    payload.pop("views", None)  
 
     updated = await books.update_book(book_id, payload)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return updated
-
-@app.get("/books/{book_id}", response_model=BookOut)
-async def get_book(book_id: str):
-    assert books is not None
-    updated = await books.increment_and_get(book_id)
     if not updated:
         raise HTTPException(status_code=404, detail="Book not found")
     return updated
@@ -92,6 +84,14 @@ async def get_book(book_id: str):
 async def list_books_by_user(username: str):
     assert books is not None
     return await books.list_books_by_user(username)
+
+@app.get("/books/{book_id}", response_model=BookOut)
+async def get_book(book_id: str):
+    assert books is not None
+    updated = await books.increment_and_get(book_id)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return updated
 
 # ----- Profiles -----
 
@@ -181,8 +181,6 @@ async def list_comments_by_user(username: str, limit: int = 100, skip: int = 0):
     assert comments is not None
     return await comments.list_comments_by_user(username, limit=limit, skip=skip)
 
-
-# Deleting book now needs to delete comments too so that it leaves no dangling pointers
 @app.delete("/books/{book_id}", status_code=204)
 async def delete_book(book_id: str):
     assert books is not None and comments is not None
